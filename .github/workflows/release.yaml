@@ -1,0 +1,98 @@
+
+name: Release app
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_NAME: ttech
+      DATABASE_URL: jdbc:mysql://localhost:3306/ttech?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DATABASE_USERNAME: root
+      DATABASE_PASSWORD: root
+
+    strategy:
+      matrix:
+        java-version: [21]
+        java-app-name: ['ttech-final-backend']
+    
+    steps:
+      - name: Checkout repo code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+
+      - name: Setup MySQL
+        uses: mirromutth/mysql-action@v1.1
+        with:
+          mysql version: '8.0'
+          mysql database: ${{ env.DATABASE_NAME }}
+          mysql root password: ${{ env.DATABASE_PASSWORD }}
+
+      # https://stackoverflow.com/a/58282862/10942774
+      - name: Change gradle's wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Build JAR
+        run: ./gradlew build -x test
+
+      - name: Upload JAR as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.java-app-name }}
+          path: |
+            ./build/libs/*.jar
+            ./*.sql
+            ./public/*
+  
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-app-name: ['ttech-final-backend']
+
+    steps:
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.java-app-name }}
+
+      - name: Move JARs to root
+        run: |
+          if ls ./build/libs/*.jar 1> /dev/null 2>&1; then
+            mv ./build/libs/*.jar ./
+            echo "JAR files were moved to the root directory!"
+          else
+            echo "Unable to find a JAR file inside build/libs!"
+            exit 1
+          fi
+
+      - name: Create ZIP package
+        run: |
+          zip -r ${{ matrix.java-app-name }}-${{ github.ref_name }}.zip \
+            ./*.sql \
+            ./*.jar \
+            ./public/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: ./${{ matrix.java-app-name }}-${{ github.ref_name }}.zip
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.SECRET_TOKEN }}

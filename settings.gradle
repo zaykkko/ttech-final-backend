@@ -1,0 +1,3 @@
+rootProject.name = 'ttech-final-backend'
+
+include 'com.techlab.utilities'
