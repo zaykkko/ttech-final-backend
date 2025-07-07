@@ -324,6 +324,7 @@ const configureProducts = async () => {
             if (result.success) {
               loadProducts();
               $("#search-product-result").empty();
+              bootstrap.Modal.getInstance($("#edit-product-modal").get(0)).hide();
             }
           });
       });
